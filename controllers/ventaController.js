@@ -79,17 +79,26 @@ exports.obtenerPendientes = async (req, res) => {
 exports.actualizarEstadosCaja = async (req, res) => {
   try {
     const { id } = req.params;
-    const { estadoPago, metodoPago, desglosePago, pagoConTarjeta } = req.body;
+    const {
+      estadoPago,
+      desglosePago,
+      pagoConTarjeta,
+      descuento,
+      estadoEntrega,
+    } = req.body;
 
-    // 1. PRIMERO buscamos la venta
     const ventaActual = await Venta.findById(id);
     if (!ventaActual)
       return res.status(404).json({ mensaje: "Venta no encontrada" });
 
-    // 2. Lógica de recargo por tarjeta (Si el cliente cambia de opinión en caja)
+    // 1. Lógica de Descuento (NUEVO)
+    if (descuento !== undefined) {
+      ventaActual.descuento = Number(descuento);
+    }
+
+    // 2. Lógica de recargo por tarjeta
     if (pagoConTarjeta !== undefined) {
       ventaActual.pagoConTarjeta = pagoConTarjeta;
-      // Al cambiar el modo, reseteamos pagos previos para evitar inconsistencias de cálculos
       ventaActual.desglosePago = { efectivo: 0, digital: 0, tarjeta: 0 };
       ventaActual.estadoPago = "PENDIENTE";
     }
@@ -103,13 +112,15 @@ exports.actualizarEstadosCaja = async (req, res) => {
       const { efectivo, digital, tarjeta } = ventaActual.desglosePago;
       const totalAcumulado = efectivo + digital + tarjeta;
 
-      // Calcular total con recargo actual
-      const totalConRecargo = ventaActual.pagoConTarjeta
+      // CÁLCULO CRUCIAL: Total Real = (Base * Recargo) - Descuento
+      const totalBaseConRecargo = ventaActual.pagoConTarjeta
         ? ventaActual.total * 1.05
         : ventaActual.total;
 
-      // -0.01 por margen de redondeo
-      if (totalAcumulado >= totalConRecargo - 0.01) {
+      const totalFinalADeber = totalBaseConRecargo - ventaActual.descuento;
+
+      // Verificamos si ya completó el pago con el descuento aplicado
+      if (totalAcumulado >= totalFinalADeber - 0.01) {
         ventaActual.estadoPago = "PAGADO";
       } else {
         ventaActual.estadoPago = "PENDIENTE";
@@ -125,17 +136,16 @@ exports.actualizarEstadosCaja = async (req, res) => {
       else if (tarjeta > 0) ventaActual.metodoPago = "TARJETA";
     }
 
-    // Si envían estadoPago manual (ej. para revertir a pendiente)
-    if (estadoPago) {
-      ventaActual.estadoPago = estadoPago;
-      if (estadoPago === "PENDIENTE") {
-        ventaActual.desglosePago = { efectivo: 0, digital: 0, tarjeta: 0 };
-        ventaActual.metodoPago = "PENDIENTE";
-      }
+    // Revertir pago manual
+    if (estadoPago === "PENDIENTE") {
+      ventaActual.estadoPago = "PENDIENTE";
+      ventaActual.desglosePago = { efectivo: 0, digital: 0, tarjeta: 0 };
+      ventaActual.descuento = 0; // Opcional: resetear descuento al resetear pago
+      ventaActual.metodoPago = "PENDIENTE";
     }
 
-    if (req.body.estadoEntrega) {
-      ventaActual.estadoEntrega = req.body.estadoEntrega;
+    if (estadoEntrega) {
+      ventaActual.estadoEntrega = estadoEntrega;
     }
 
     await ventaActual.save();

@@ -26,6 +26,7 @@ const VentaSchema = new mongoose.Schema({
     celular: String, // TELEFONO
   },
   total: { type: Number, required: true },
+  descuento: { type: Number, default: 0 },
   pagoConTarjeta: { type: Boolean, default: false },
   metodoPago: {
     type: String,
