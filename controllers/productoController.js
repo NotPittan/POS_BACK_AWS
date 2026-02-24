@@ -7,57 +7,50 @@ exports.buscarProductos = async (req, res) => {
 
     const termino = q.trim();
 
-    // --- NUEVO: LÓGICA DE BÚSQUEDA POR PALABRAS PARA EL NOMBRE ---
-    // Esto permite que "lapicero azul" encuentre "LAPICERO FABER AZUL"
+    // --- CAMBIO 1: BÚSQUEDA POR PALABRAS SUELTAS (AZUL 031) ---
+    // Dividimos el texto en palabras para que no importe el orden
     const palabras = termino.split(/\s+/).filter((p) => p.length > 0);
+
+    // Esta condición obliga a que el producto tenga TODAS las palabras escritas
     const condicionNombreCerebral = {
-      $and: palabras.map((p) => ({
-        PRODUCTO: { $regex: `\\b${p}`, $options: "i" },
-      })),
+      $and: palabras.map((p) => {
+        // Escapamos caracteres especiales por seguridad
+        const pSafe = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        return {
+          // Usamos \\b para marcar el inicio de la palabra
+          // Esto evita que "cola" coincida con "escolar"
+          PRODUCTO: { $regex: `\\b${pSafe}`, $options: "i" },
+        };
+      }),
     };
 
-    // 1. CONDICIONES BÁSICAS (Actualizado)
+    // --- CAMBIO 2: INTEGRACIÓN DE CONDICIONES ---
     let condiciones = [
       { BARCODE: termino },
       { SKU: termino },
-      condicionNombreCerebral, // CAMBIO: Usamos la lógica de palabras en vez del regex simple
+      condicionNombreCerebral, // Aquí aplicamos la nueva lógica de nombre
     ];
 
-    // 2. LÓGICA DE SKU FLEXIBLE (Para 'VB0001' encontrando 'VB-0001')
+    // --- CAMBIO 3: SKU FLEXIBLE (VB07 -> VB_0007) ---
+    // Esto permite encontrar el SKU aunque falten guiones o ceros
     const terminoSafe = termino.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const patronFlexible = terminoSafe.split("").join("[\\W_]*");
-    condiciones.push({ SKU: { $regex: `^${patronFlexible}$`, $options: "i" } });
+    condiciones.push({ SKU: { $regex: patronFlexible, $options: "i" } });
 
-    // 3. LÓGICA "DESORDENADA" (NUEVO: Para '0001vb' o '0001')
-    // Separa los números y las letras del término de búsqueda
-    // Ejemplo: "0001vb" se convierte en ["0001", "vb"]
+    // --- CAMBIO 4: LÓGICA DESORDENADA PARA SKU (0001VB) ---
     const gruposNumeros = termino.match(/\d+/g);
     const gruposLetras = termino.match(/[a-zA-Z]+/g);
 
-    if (gruposNumeros || gruposLetras) {
-      const partes = [];
-      if (gruposNumeros) partes.push(...gruposNumeros);
-      if (gruposLetras) partes.push(...gruposLetras);
-
-      if (partes.length > 0) {
-        // Le decimos a la base de datos:
-        // "Dame el producto cuyo SKU contenga '0001' Y TAMBIÉN contenga 'vb'"
-        // No importa si está al principio, al final o en medio.
-        const condicionesPartes = partes.map((part) => ({
-          SKU: { $regex: part, $options: "i" },
-        }));
-
-        condiciones.push({ $and: condicionesPartes });
-      }
+    if (gruposNumeros && gruposLetras) {
+      const partes = [...gruposNumeros, ...gruposLetras];
+      const condicionesPartes = partes.map((part) => ({
+        SKU: { $regex: part, $options: "i" },
+      }));
+      condiciones.push({ $and: condicionesPartes });
     }
 
-    // 4. BÚSQUEDA NUMÉRICA (Por si acaso se guardó como número)
-    if (!isNaN(termino)) {
-      const valorNumerico = Number(termino);
-      condiciones.push({ BARCODE: valorNumerico });
-      condiciones.push({ SKU: valorNumerico });
-    }
-
+    // Ejecución final con todas las mejoras
     const productos = await Producto.find({
       $or: condiciones,
     }).limit(20);
