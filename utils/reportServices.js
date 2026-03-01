@@ -147,12 +147,31 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       `Reporte_${fechaStr}.pdf`,
     );
 
+    const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
     for (const num of numeros) {
-      await client.sendMessage(
-        `${num}@c.us`,
-        `📊 *Librería Leo: Reporte del ${fechaStr}*\nBalance Neto: S/ ${balance.toFixed(2)}`,
-      );
-      await client.sendMessage(`${num}@c.us`, media);
+      try {
+        const chatId = `${num}@c.us`;
+
+        // 1. Enviar el texto
+        await client.sendMessage(
+          chatId,
+          `📊 *Librería Leo: Reporte del ${fechaStr}*\nBalance Neto: S/ ${balance.toFixed(2)}`,
+        );
+
+        // 2. Esperar 3 segundos para no saturar la RAM
+        await delay(3000);
+
+        // 3. Enviar el PDF
+        await client.sendMessage(chatId, media);
+
+        // 4. Esperar otros 3 segundos antes de pasar al siguiente número
+        await delay(3000);
+
+        console.log(`✅ WhatsApp enviado a: ${num}`);
+      } catch (wsError) {
+        console.error(`❌ Error enviando a ${num}:`, wsError.message);
+      }
     }
 
     console.log("✅ Reporte completo enviado.");
