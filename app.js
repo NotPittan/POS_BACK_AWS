@@ -8,7 +8,7 @@ const app = express();
 
 // --- Middlewares Globales ---
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json());
 
 // --- Definición de Rutas API ---
 app.use("/api/ventas", require("./routes/ventaRoutes"));
