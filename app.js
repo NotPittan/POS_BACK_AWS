@@ -3,15 +3,17 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const productoRoutes = require("./routes/productoRoutes");
+const registroRoutes = require("./routes/registroRoutes");
 const app = express();
 
 // --- Middlewares Globales ---
 app.use(cors({ origin: "*" }));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // --- Definición de Rutas API ---
 app.use("/api/ventas", require("./routes/ventaRoutes"));
-app.use("/api/productos", require("./routes/productoRoutes"));
+app.use("/api/productos", productoRoutes);
+app.use("/api/daily-records", registroRoutes);
 
 // --- Persistencia de Datos (MongoDB) ---
 mongoose
