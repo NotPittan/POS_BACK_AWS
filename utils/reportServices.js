@@ -4,7 +4,7 @@ const nodemailer = require("nodemailer");
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 
-// --- INICIALIZACIÓN SIMPLE (La que funcionó) ---
+// 1. Configuración del cliente de WhatsApp Web
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
@@ -12,8 +12,16 @@ const client = new Client({
   },
 });
 
-client.on("qr", (qr) => qrcode.generate(qr, { small: true }));
-client.on("ready", () => console.log("✅ WhatsApp: Cliente listo"));
+// Evento para mostrar el QR en la consola de la EC2
+client.on("qr", (qr) => {
+  console.log("--- ESCANEA ESTE QR CON TU WHATSAPP ---");
+  qrcode.generate(qr, { small: true });
+});
+
+client.on("ready", () => {
+  console.log("✅ WhatsApp: Cliente listo y conectado");
+});
+
 client.initialize();
 
 exports.generarYEnviarReporte = async (data, emailDestino) => {
@@ -21,120 +29,75 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     const doc = new jsPDF();
     const ahora = new Date();
     const fechaStr = ahora.toLocaleDateString("es-PE");
-    const renderTable = autoTable.default || autoTable;
 
-    // --- DISEÑO PRO (Colores y Resumen) ---
-    doc.setFontSize(22);
-    doc.setTextColor(30, 41, 59);
-    doc.text("LIBRERÍA LEO", 105, 20, { align: "center" });
+    // --- DISEÑO DEL PDF ---
+    doc.setFontSize(20);
+    doc.setTextColor(37, 99, 235);
+    doc.text("LIBRERÍA LEO - REPORTE DIARIO", 105, 20, { align: "center" });
     doc.setFontSize(10);
-    doc.text(`REPORTE DE CAJA - ${fechaStr}`, 105, 27, { align: "center" });
-    doc.line(20, 30, 190, 30);
+    doc.setTextColor(100);
+    doc.text(
+      `Generado el: ${fechaStr} a las ${ahora.toLocaleTimeString()}`,
+      105,
+      28,
+      { align: "center" },
+    );
 
-    let yPos = 38;
+    // Tabla de registros
+    const rows = data.map((r) => [
+      r.type,
+      r.entity,
+      `S/ ${r.amount.toFixed(2)}`,
+      r.paymentMethod,
+      r.displayTime || "N/A",
+    ]);
 
-    const crearSeccion = (titulo, items, colorRGB) => {
-      if (items.length === 0) return;
-      doc.setFontSize(13);
-      doc.setTextColor(colorRGB[0], colorRGB[1], colorRGB[2]);
-      doc.text(titulo, 20, yPos);
-      const rows = items.map((r) => [
-        r.entity,
-        `S/ ${r.amount.toFixed(2)}`,
-        r.paymentMethod,
-        r.displayTime || "N/A",
-      ]);
-      renderTable(doc, {
-        startY: yPos + 4,
-        head: [["CONCEPTO", "MONTO", "MÉTODO", "HORA"]],
-        body: rows,
-        theme: "striped",
-        headStyles: { fillColor: colorRGB },
-        styles: { fontSize: 8 },
-      });
-      yPos = doc.lastAutoTable.finalY + 12;
-    };
-
-    const ventas = data.filter((r) => r.type === "VENTA");
-    const gastos = data.filter((r) => r.type === "GASTO");
-    const proveedores = data.filter((r) => r.type === "PROVEEDOR");
-
-    crearSeccion("Ventas del Día", ventas, [16, 185, 129]);
-    crearSeccion("Gastos Operativos", gastos, [239, 68, 68]);
-    crearSeccion("Pagos a Proveedores", proveedores, [139, 92, 246]);
-
-    // Resumen Final
-    const totalVentas = ventas.reduce((acc, r) => acc + r.amount, 0);
-    const totalEgresos =
-      gastos.reduce((acc, r) => acc + r.amount, 0) +
-      proveedores.reduce((acc, r) => acc + r.amount, 0);
-    const balance = totalVentas - totalEgresos;
-    const porMetodo = data.reduce((acc, r) => {
-      if (r.type === "VENTA")
-        acc[r.paymentMethod] = (acc[r.paymentMethod] || 0) + r.amount;
-      return acc;
-    }, {});
-
-    if (yPos > 240) {
-      doc.addPage();
-      yPos = 20;
-    }
-    doc.setFontSize(15);
-    doc.setTextColor(30, 41, 59);
-    doc.text("RESUMEN FINAL", 20, yPos);
-
-    renderTable(doc, {
-      startY: yPos + 4,
-      body: [
-        ["Ventas Brutas", `S/ ${totalVentas.toFixed(2)}`],
-        ["Total Egresos", `S/ ${totalEgresos.toFixed(2)}`],
-        ["Efectivo", `S/ ${(porMetodo["EFECTIVO"] || 0).toFixed(2)}`],
-        ["Yape / Plin", `S/ ${(porMetodo["YAPE / PLIN"] || 0).toFixed(2)}`],
-        ["Tarjeta", `S/ ${(porMetodo["TARJETA"] || 0).toFixed(2)}`],
-        [
-          { content: "BALANCE NETO", styles: { fontStyle: "bold" } },
-          {
-            content: `S/ ${balance.toFixed(2)}`,
-            styles: { fontStyle: "bold" },
-          },
-        ],
-      ],
-      theme: "grid",
+    (autoTable.default || autoTable)(doc, {
+      startY: 40,
+      head: [["TIPO", "CONCEPTO", "MONTO", "MÉTODO", "HORA"]],
+      body: rows,
+      theme: "striped",
+      headStyles: { fillColor: [37, 99, 235] },
       styles: { fontSize: 9 },
     });
 
-    const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
-    const pdfBase64 = pdfBuffer.toString("base64");
+    const pdfArray = doc.output(); // Genera el string binario
+    const pdfBuffer = Buffer.from(pdfArray, "binary"); // Lo convierte correctamente a Buffer
+    const pdfBase64 = pdfBuffer.toString("base64"); // Para WhatsApp
 
-    // --- ENVÍO EMAIL ---
+    // --- 2. ENVÍO POR CORREO ---
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: { user: "pedroenocgb1245@gmail.com", pass: "nodvdokaqfziibce" },
-    });
-    await transporter.sendMail({
-      from: '"POS Librería Leo" <pedroenocgb1245@gmail.com>',
-      to: emailDestino,
-      subject: `📊 Reporte - ${fechaStr}`,
-      attachments: [
-        { filename: `Reporte_${fechaStr}.pdf`, content: pdfBuffer },
-      ],
+      auth: {
+        user: "pedroenocgb1245@gmail.com",
+        pass: "nodvdokaqfziibce",
+      },
     });
 
-    // --- ENVÍO WHATSAPP (Solo a ti, directo) ---
-    const chatId = "51963977020@c.us";
+    await transporter.sendMail({
+      from: '"Sistema POS Librería Leo" <pedroenocgb1245@gmail.com>',
+      to: emailDestino,
+      subject: `📊 Cierre de Caja - ${fechaStr}`,
+      text: `Hola, se ha realizado el cierre de caja automático.\nAdjunto encontrarás el reporte detallado.`,
+      attachments: [{ filename: `Cierre_${fechaStr}.pdf`, content: pdfBuffer }],
+    });
+
+    // --- 3. ENVÍO POR WHATSAPP (Número actualizado) ---
+    const numeroCelular = "51963977020"; // Tu nuevo número con código de país
+    const chatId = `${numeroCelular}@c.us`;
     const media = new MessageMedia(
       "application/pdf",
       pdfBase64,
-      `Reporte_${fechaStr}.pdf`,
+      `Cierre_${fechaStr}.pdf`,
     );
 
     await client.sendMessage(
       chatId,
-      `📊 *Librería Leo: Reporte del ${fechaStr}*\nBalance: S/ ${balance.toFixed(2)}`,
+      `📊 *Librería Leo - Cierre Diario*\nFecha: ${fechaStr}\nAdjunto envío el reporte de ventas en formato PDF.`,
     );
     await client.sendMessage(chatId, media);
 
-    console.log("✅ Reporte enviado con éxito.");
+    console.log("✅ Reporte enviado por Email y WhatsApp con éxito");
     return true;
   } catch (error) {
     console.error("Error Report Service:", error);
