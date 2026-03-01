@@ -98,7 +98,6 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     await client.sendMessage(chatId, media);
 
     console.log("✅ Reporte enviado por Email y WhatsApp con éxito");
-
     return true;
   } catch (error) {
     console.error("Error Report Service:", error);
