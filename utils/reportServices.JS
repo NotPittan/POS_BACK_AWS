@@ -1,5 +1,5 @@
 const { jsPDF } = require("jspdf");
-const { default: autoTable } = require("jspdf-autotable");
+const autoTable = require("jspdf-autotable").default;
 const nodemailer = require("nodemailer");
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
