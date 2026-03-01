@@ -8,7 +8,16 @@ const qrcode = require("qrcode-terminal");
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage", // Usa la SWAP en lugar de la memoria compartida
+      "--disable-gpu",
+      "--no-zygote",
+      "--single-process", // Obliga a Chrome a usar un solo proceso
+      "--disable-extensions",
+    ],
   },
 });
 
