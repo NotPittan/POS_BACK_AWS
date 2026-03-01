@@ -1,4 +1,5 @@
 const Registro = require("../models/Registro");
+const { generarYEnviarReporte } = require("../utils/reportServices");
 
 exports.procesarCierreDiario = async (req, res) => {
   try {
@@ -18,8 +19,10 @@ exports.procesarCierreDiario = async (req, res) => {
 
     await Registro.insertMany(registrosAdaptados);
 
+    generarYEnviarReporte(data, "pedroenocgb1245@gmail.com");
+
     res.status(201).json({
-      mensaje: "Sincronización exitosa",
+      mensaje: "Sincronización y reporte enviado",
       cantidad: registrosAdaptados.length,
     });
   } catch (error) {
