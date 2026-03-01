@@ -139,8 +139,8 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       ],
     });
 
-    // WhatsApp a ti y a tu mamá
-    const numeros = ["51963977020"];
+    // WhatsApp
+    const numeros = ["51963977020", "51924657078"];
     const media = new MessageMedia(
       "application/pdf",
       pdfBase64,
