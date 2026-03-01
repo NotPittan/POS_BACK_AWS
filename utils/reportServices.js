@@ -7,24 +7,14 @@ const qrcode = require("qrcode-terminal");
 // 1. Configuración del cliente de WhatsApp Web
 const client = new Client({
   authStrategy: new LocalAuth(),
-  qrMaxRetries: 10, // Reintenta más veces el QR
-  authTimeoutMs: 60000, // Espera 1 minuto a que cargue la sesión
   puppeteer: {
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--single-process", // Ayuda a que no consuma tanta RAM
-      "--no-zygote",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   },
 });
 
 // Evento para mostrar el QR en la consola de la EC2
 client.on("qr", (qr) => {
-  console.log("--- NUEVO QR GENERADO ---");
+  console.log("--- ESCANEA ESTE QR CON TU WHATSAPP ---");
   qrcode.generate(qr, { small: true });
 });
 
@@ -93,31 +83,21 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     });
 
     // --- 3. ENVÍO POR WHATSAPP (Número actualizado) ---
-    if (!client.info || !client.info.wid) {
-      console.error(
-        "❌ WhatsApp no está listo todavía. Escanea el QR primero.",
-      );
-      // No lanzamos error para que al menos el Gmail sí se envíe
-    } else {
-      const numeroCelular = "51963977020";
-      const chatId = `${numeroCelular}@c.us`;
-      const media = new MessageMedia(
-        "application/pdf",
-        pdfBase64,
-        `Cierre_${fechaStr}.pdf`,
-      );
+    const numeroCelular = "51963977020"; // Tu nuevo número con código de país
+    const chatId = `${numeroCelular}@c.us`;
+    const media = new MessageMedia(
+      "application/pdf",
+      pdfBase64,
+      `Cierre_${fechaStr}.pdf`,
+    );
 
-      await client.sendMessage(
-        chatId,
-        `📊 *Librería Leo - Cierre Diario*\nFecha: ${fechaStr}`,
-      );
+    await client.sendMessage(
+      chatId,
+      `📊 *Librería Leo - Cierre Diario*\nFecha: ${fechaStr}\nAdjunto envío el reporte de ventas en formato PDF.`,
+    );
+    await client.sendMessage(chatId, media);
 
-      // Pausa de 2 segundos para no saturar la subida del archivo
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      await client.sendMessage(chatId, media);
-      console.log("✅ WhatsApp enviado con éxito");
-    }
+    console.log("✅ Reporte enviado por Email y WhatsApp con éxito");
     return true;
   } catch (error) {
     console.error("Error Report Service:", error);
