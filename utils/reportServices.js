@@ -7,13 +7,17 @@ const qrcode = require("qrcode-terminal");
 // 1. Configuración del cliente de WhatsApp Web
 const client = new Client({
   authStrategy: new LocalAuth(),
+  qrMaxRetries: 10, // Reintenta más veces el QR
+  authTimeoutMs: 60000, // Espera 1 minuto a que cargue la sesión
   puppeteer: {
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage", // Para evitar problemas en entornos limitados
+      "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--single-process", // Ayuda a que no consuma tanta RAM
+      "--no-zygote",
     ],
   },
 });
