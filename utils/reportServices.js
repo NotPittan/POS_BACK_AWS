@@ -44,7 +44,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     doc.setTextColor(30, 41, 59);
     doc.text("LIBRERÍA LEO", 105, 20, { align: "center" });
     doc.setFontSize(12);
-    doc.text(`CIERRE DE CAJA DETALLADO - ${fechaStr}`, 105, 28, {
+    doc.text(`REPORTE DETALLADO - ${fechaStr}`, 105, 28, {
       align: "center",
     });
     doc.line(20, 32, 190, 32);
@@ -77,8 +77,8 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     const gastos = data.filter((r) => r.type === "GASTO");
     const proveedores = data.filter((r) => r.type === "PROVEEDOR");
 
-    dibujarTabla("VENTAS (INGRESOS)", ventas, [16, 185, 129]); // Verde
-    dibujarTabla("GASTOS OPERATIVOS", gastos, [239, 68, 68]); // Rojo
+    dibujarTabla("VENTAS", ventas, [16, 185, 129]); // Verde
+    dibujarTabla("GASTOS", gastos, [239, 68, 68]); // Rojo
     dibujarTabla("PAGOS A PROVEEDORES", proveedores, [139, 92, 246]); // Morado
 
     // --- LÓGICA DE CÁLCULOS ---
@@ -117,7 +117,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       body: [
         [
           {
-            content: "DESGLOSE DE VENTAS",
+            content: "TABLA DE VENTAS",
             colSpan: 2,
             styles: {
               halign: "center",
@@ -139,7 +139,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
 
         [
           {
-            content: "DESGLOSE DE EGRESOS",
+            content: "TABLA DE EGRESOS",
             colSpan: 2,
             styles: {
               halign: "center",
