@@ -1,5 +1,5 @@
 const { jsPDF } = require("jspdf");
-require("jspdf-autotable");
+const { default: autoTable } = require("jspdf-autotable");
 const nodemailer = require("nodemailer");
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
@@ -52,7 +52,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       r.displayTime || "N/A",
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 40,
       head: [["TIPO", "CONCEPTO", "MONTO", "MÉTODO", "HORA"]],
       body: rows,
