@@ -7,7 +7,24 @@ const qrcode = require("qrcode-terminal");
 // --- INICIALIZACIÓN WHATSAPP ---
 const client = new Client({
   authStrategy: new LocalAuth(),
-  puppeteer: { args: ["--no-sandbox", "--disable-setuid-sandbox"] },
+  webVersionCache: {
+    type: "remote",
+    remotePath:
+      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+  },
+  puppeteer: {
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+    ],
+    executablePath: "/usr/bin/google-chrome-stable", // Fuerza a usar Chrome instalado
+    headless: true,
+  },
 });
 
 client.on("qr", (qr) => qrcode.generate(qr, { small: true }));
@@ -153,24 +170,34 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       try {
         const chatId = `${num}@c.us`;
 
+        // Verificación de salud del cliente antes de enviar
+        if (!client.pupPage || client.pupPage.isClosed()) {
+          throw new Error("El navegador de WhatsApp se cerró inesperadamente.");
+        }
+
         // 1. Enviar el texto
         await client.sendMessage(
           chatId,
           `📊 *Librería Leo: Reporte del ${fechaStr}*\nBalance Neto: S/ ${balance.toFixed(2)}`,
         );
 
-        // 2. Esperar 3 segundos para no saturar la RAM
-        await delay(3000);
+        await delay(5000); // Aumentamos a 5 segundos el respiro
 
-        // 3. Enviar el PDF
+        // 2. Enviar el PDF
         await client.sendMessage(chatId, media);
 
-        // 4. Esperar otros 3 segundos antes de pasar al siguiente número
-        await delay(3000);
+        await delay(5000);
 
         console.log(`✅ WhatsApp enviado a: ${num}`);
       } catch (wsError) {
         console.error(`❌ Error enviando a ${num}:`, wsError.message);
+        // Si detectamos que el frame se soltó, intentamos re-inicializar el cliente
+        if (wsError.message.includes("detached Frame")) {
+          console.log(
+            "🔄 Reiniciando cliente de WhatsApp por error de frame...",
+          );
+          client.initialize();
+        }
       }
     }
 
