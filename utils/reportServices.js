@@ -73,73 +73,49 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     const ventas = data.filter((r) => r.type === "VENTA");
     const gastos = data.filter((r) => r.type === "GASTO");
     const proveedores = data.filter((r) => r.type === "PROVEEDOR");
+    const egresosTotal = [...gastos, ...proveedores];
 
     dibujarTabla("INGRESOS (VENTAS)", ventas, [16, 185, 129]);
     dibujarTabla("GASTOS OPERATIVOS", gastos, [239, 68, 68]);
     dibujarTabla("PAGOS A PROVEEDORES", proveedores, [139, 92, 246]);
 
-    // --- LÓGICA CONTABLE DETALLADA ---
+    // --- LÓGICA CONTABLE POR CANAL ---
     const calc = (arr, method) =>
       arr
         .filter((i) => i.paymentMethod === method)
         .reduce((a, r) => a + r.amount, 0);
 
-    // Desglose Ventas
+    // Totales por método
     const vEf = calc(ventas, "EFECTIVO");
     const vYa = calc(ventas, "YAPE / PLIN");
     const vTa = calc(ventas, "TARJETA");
-    const totalVentas = vEf + vYa + vTa;
 
-    // Desglose Egresos (Gastos + Prov)
-    const egresos = [...gastos, ...proveedores];
-    const eEf = calc(egresos, "EFECTIVO");
-    const eYa = calc(egresos, "YAPE / PLIN");
-    const eTa = calc(egresos, "TARJETA");
+    const eEf = calc(egresosTotal, "EFECTIVO");
+    const eYa = calc(egresosTotal, "YAPE / PLIN");
+    const eTa = calc(egresosTotal, "TARJETA");
+
+    // Balances individuales (Venta - Egreso del mismo método)
+    const balEf = vEf - eEf;
+    const balYa = vYa - eYa;
+    const balTa = vTa - eTa;
+
+    const totalIngresos = vEf + vYa + vTa;
     const totalEgresos = eEf + eYa + eTa;
+    const balanceNetoGeneral = totalIngresos - totalEgresos;
 
-    // Cuadre final
-    const efectivoEnCaja = vEf - eEf; // Lo que debería haber físicamente
-    const balanceNeto = totalVentas - totalEgresos; // Ganancia total del día
-
-    if (yPos > 210) {
+    if (yPos > 200) {
       doc.addPage();
       yPos = 20;
     }
     doc.setFontSize(15);
     doc.setTextColor(30, 41, 59);
-    doc.text("RESUMEN DE CUADRE DE CAJA", 20, yPos);
+    doc.text("RESUMEN DE CUADRE FINAL", 20, yPos);
 
-    const resRows = [];
-
-    // Solo agregar filas de ventas si hubo movimiento
-    resRows.push([
-      {
-        content: "FLUJO DE VENTAS",
-        colSpan: 2,
-        styles: {
-          halign: "center",
-          fillColor: [241, 245, 249],
-          fontStyle: "bold",
-        },
-      },
-    ]);
-    if (vEf > 0) resRows.push(["Ventas en Efectivo", `S/ ${vEf.toFixed(2)}`]);
-    if (vYa > 0)
-      resRows.push(["Ventas por Yape / Plin", `S/ ${vYa.toFixed(2)}`]);
-    if (vTa > 0) resRows.push(["Ventas por Tarjeta", `S/ ${vTa.toFixed(2)}`]);
-    resRows.push([
-      { content: "TOTAL INGRESOS", styles: { fontStyle: "bold" } },
-      {
-        content: `S/ ${totalVentas.toFixed(2)}`,
-        styles: { fontStyle: "bold" },
-      },
-    ]);
-
-    // Solo agregar filas de egresos si hubo movimiento
-    if (totalEgresos > 0) {
-      resRows.push([
+    const resRows = [
+      // Bloque de Ingresos
+      [
         {
-          content: "FLUJO DE EGRESOS",
+          content: "DESGLOSE DE INGRESOS",
           colSpan: 2,
           styles: {
             halign: "center",
@@ -147,52 +123,109 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
             fontStyle: "bold",
           },
         },
-      ]);
-      if (eEf > 0)
-        resRows.push(["Egresos Pagados en Efectivo", `S/ ${eEf.toFixed(2)}`]);
-      if (eYa > 0)
-        resRows.push(["Egresos Pagados por Yape", `S/ ${eYa.toFixed(2)}`]);
-      if (eTa > 0)
-        resRows.push(["Egresos Pagados por Tarjeta", `S/ ${eTa.toFixed(2)}`]);
-      resRows.push([
-        { content: "TOTAL EGRESOS", styles: { fontStyle: "bold" } },
+      ],
+      ["Total Ventas Efectivo", `S/ ${vEf.toFixed(2)}`],
+      ["Total Ventas Yape / Plin", `S/ ${vYa.toFixed(2)}`],
+      ["Total Ventas Tarjeta", `S/ ${vTa.toFixed(2)}`],
+      [
+        { content: "SUMA TOTAL INGRESOS", styles: { fontStyle: "bold" } },
+        {
+          content: `S/ ${totalIngresos.toFixed(2)}`,
+          styles: { fontStyle: "bold" },
+        },
+      ],
+
+      // Bloque de Egresos
+      [
+        {
+          content: "DESGLOSE DE EGRESOS",
+          colSpan: 2,
+          styles: {
+            halign: "center",
+            fillColor: [241, 245, 249],
+            fontStyle: "bold",
+          },
+        },
+      ],
+      ["Egresos pagados con Efectivo", `S/ ${eEf.toFixed(2)}`],
+      ["Egresos pagados con Yape", `S/ ${eYa.toFixed(2)}`],
+      ["Egresos pagados con Tarjeta", `S/ ${eTa.toFixed(2)}`],
+      [
+        { content: "TOTAL EGRESOS DEL DÍA", styles: { fontStyle: "bold" } },
         {
           content: `S/ ${totalEgresos.toFixed(2)}`,
           styles: { fontStyle: "bold" },
         },
-      ]);
-    }
+      ],
 
-    // Cuadre Final (SIEMPRE VISIBLE)
-    resRows.push([
-      {
-        content: "SITUACIÓN FINAL",
-        colSpan: 2,
-        styles: {
-          halign: "center",
-          fillColor: [30, 41, 59],
-          textColor: [255, 255, 255],
-          fontStyle: "bold",
+      // Bloque de Balances por Canal (Lo que pediste)
+      [
+        {
+          content: "BALANCES POR MÉTODO DE PAGO",
+          colSpan: 2,
+          styles: {
+            halign: "center",
+            fillColor: [226, 232, 240],
+            fontStyle: "bold",
+          },
         },
-      },
-    ]);
-    resRows.push([
-      "EFECTIVO FÍSICO EN CAJA (Ventas Ef - Gastos Ef)",
-      {
-        content: `S/ ${efectivoEnCaja.toFixed(2)}`,
-        styles: { fontStyle: "bold", textColor: [37, 99, 235] },
-      },
-    ]);
-    resRows.push([
-      "BALANCE NETO DEL DÍA (Ganancia Real)",
-      {
-        content: `S/ ${balanceNeto.toFixed(2)}`,
-        styles: {
-          fontStyle: "bold",
-          textColor: balanceNeto >= 0 ? [16, 128, 0] : [200, 0, 0],
+      ],
+      [
+        "Balance Efectivo (Caja Física)",
+        {
+          content: `S/ ${balEf.toFixed(2)}`,
+          styles: {
+            fontStyle: "bold",
+            textColor: balEf >= 0 ? [0, 100, 0] : [200, 0, 0],
+          },
         },
-      },
-    ]);
+      ],
+      [
+        "Balance Yape / Plin (Virtual)",
+        {
+          content: `S/ ${balYa.toFixed(2)}`,
+          styles: {
+            fontStyle: "bold",
+            textColor: balYa >= 0 ? [0, 100, 0] : [200, 0, 0],
+          },
+        },
+      ],
+      [
+        "Balance Tarjeta (Banco)",
+        {
+          content: `S/ ${balTa.toFixed(2)}`,
+          styles: {
+            fontStyle: "bold",
+            textColor: balTa >= 0 ? [0, 100, 0] : [200, 0, 0],
+          },
+        },
+      ],
+
+      // Situación Final
+      [
+        {
+          content: "RESULTADO NETO TOTAL",
+          colSpan: 2,
+          styles: {
+            halign: "center",
+            fillColor: [30, 41, 59],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+          },
+        },
+      ],
+      [
+        "UTILIDAD TOTAL DEL DÍA",
+        {
+          content: `S/ ${balanceNetoGeneral.toFixed(2)}`,
+          styles: {
+            fontSize: 12,
+            fontStyle: "bold",
+            textColor: balanceNetoGeneral >= 0 ? [16, 128, 0] : [200, 0, 0],
+          },
+        },
+      ],
+    ];
 
     renderTable(doc, {
       startY: yPos + 5,
@@ -202,7 +235,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       columnStyles: { 0: { cellWidth: 125 }, 1: { halign: "right" } },
     });
 
-    // --- ENVÍO ---
+    // --- PROCESO DE ENVÍO ---
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
     const pdfBase64 = pdfBuffer.toString("base64");
 
@@ -227,7 +260,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       );
       await client.sendMessage(
         chatId,
-        `📊 *Librería Leo - Cuadre Final*\n\nEfectivo en Caja: *S/ ${efectivoEnCaja.toFixed(2)}*\nGanancia Real: *S/ ${balanceNeto.toFixed(2)}*`,
+        `📊 *Librería Leo - Reporte Final*\n\nEfectivo Neto: *S/ ${balEf.toFixed(2)}*\nBalance Yape: *S/ ${balYa.toFixed(2)}*\nGanancia Real: *S/ ${balanceNetoGeneral.toFixed(2)}*`,
       );
       await new Promise((r) => setTimeout(r, 2500));
       await client.sendMessage(chatId, media);
