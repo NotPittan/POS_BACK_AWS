@@ -41,7 +41,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     doc.setTextColor(30, 41, 59);
     doc.text("LIBRERÍA LEO", 105, 20, { align: "center" });
     doc.setFontSize(10);
-    doc.text(`CIERRE CONTABLE DEFINITIVO - ${fechaStr}`, 105, 27, {
+    doc.text(`CIERRE DE CAJA - ${fechaStr}`, 105, 27, {
       align: "center",
     });
     doc.line(20, 30, 190, 30);
@@ -75,8 +75,8 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     const proveedores = data.filter((r) => r.type === "PROVEEDOR");
     const egresosTotal = [...gastos, ...proveedores];
 
-    dibujarTabla("INGRESOS (VENTAS)", ventas, [16, 185, 129]);
-    dibujarTabla("GASTOS OPERATIVOS", gastos, [239, 68, 68]);
+    dibujarTabla("INGRESOS", ventas, [16, 185, 129]);
+    dibujarTabla("GASTOS", gastos, [239, 68, 68]);
     dibujarTabla("PAGOS A PROVEEDORES", proveedores, [139, 92, 246]);
 
     // --- LÓGICA CONTABLE POR CANAL ---
@@ -109,13 +109,13 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     }
     doc.setFontSize(15);
     doc.setTextColor(30, 41, 59);
-    doc.text("RESUMEN DE CUADRE FINAL", 20, yPos);
+    doc.text("RESUMEN DE CAJA", 20, yPos);
 
     const resRows = [
       // Bloque de Ingresos
       [
         {
-          content: "DESGLOSE DE INGRESOS",
+          content: "TABLA DE INGRESOS",
           colSpan: 2,
           styles: {
             halign: "center",
@@ -138,7 +138,7 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       // Bloque de Egresos
       [
         {
-          content: "DESGLOSE DE EGRESOS",
+          content: "TABLA DE EGRESOS",
           colSpan: 2,
           styles: {
             halign: "center",
@@ -147,9 +147,9 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
           },
         },
       ],
-      ["Egresos pagados con Efectivo", `S/ ${eEf.toFixed(2)}`],
-      ["Egresos pagados con Yape", `S/ ${eYa.toFixed(2)}`],
-      ["Egresos pagados con Tarjeta", `S/ ${eTa.toFixed(2)}`],
+      ["Egresos Efectivo", `S/ ${eEf.toFixed(2)}`],
+      ["Egresos Yape/Plin", `S/ ${eYa.toFixed(2)}`],
+      ["Egresos Tarjeta", `S/ ${eTa.toFixed(2)}`],
       [
         { content: "TOTAL EGRESOS DEL DÍA", styles: { fontStyle: "bold" } },
         {
