@@ -26,10 +26,7 @@ client.on("qr", (qr) => {
   qrcode.generate(qr, { small: true });
 });
 
-client.on("ready", () => {
-  console.log("✅ WhatsApp: Cliente listo y conectado");
-});
-
+client.on("ready", () => console.log("✅ WhatsApp: Cliente listo"));
 client.initialize();
 
 exports.generarYEnviarReporte = async (data, emailDestino) => {
@@ -43,13 +40,13 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     doc.setFontSize(22);
     doc.setTextColor(30, 41, 59);
     doc.text("LIBRERÍA LEO", 105, 20, { align: "center" });
-    doc.setFontSize(12);
-    doc.text(`REPORTE DETALLADO - ${fechaStr}`, 105, 28, {
+    doc.setFontSize(10);
+    doc.text(`CIERRE CONTABLE DEFINITIVO - ${fechaStr}`, 105, 27, {
       align: "center",
     });
-    doc.line(20, 32, 190, 32);
+    doc.line(20, 30, 190, 30);
 
-    let yPos = 40;
+    let yPos = 38;
 
     const dibujarTabla = (titulo, items, colorRGB) => {
       if (items.length === 0) return;
@@ -68,137 +65,145 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
         body: rows,
         theme: "striped",
         headStyles: { fillColor: colorRGB },
-        styles: { fontSize: 9 },
+        styles: { fontSize: 8 },
       });
-      yPos = doc.lastAutoTable.finalY + 15;
+      yPos = doc.lastAutoTable.finalY + 12;
     };
 
     const ventas = data.filter((r) => r.type === "VENTA");
     const gastos = data.filter((r) => r.type === "GASTO");
     const proveedores = data.filter((r) => r.type === "PROVEEDOR");
 
-    dibujarTabla("VENTAS", ventas, [16, 185, 129]); // Verde
-    dibujarTabla("GASTOS", gastos, [239, 68, 68]); // Rojo
-    dibujarTabla("PAGOS A PROVEEDORES", proveedores, [139, 92, 246]); // Morado
+    dibujarTabla("INGRESOS (VENTAS)", ventas, [16, 185, 129]);
+    dibujarTabla("GASTOS OPERATIVOS", gastos, [239, 68, 68]);
+    dibujarTabla("PAGOS A PROVEEDORES", proveedores, [139, 92, 246]);
 
-    // --- LÓGICA DE CÁLCULOS ---
-    const vEfectivo = ventas
-      .filter((v) => v.paymentMethod === "EFECTIVO")
-      .reduce((acc, r) => acc + r.amount, 0);
-    const vDigital = ventas
-      .filter((v) => v.paymentMethod === "YAPE / PLIN")
-      .reduce((acc, r) => acc + r.amount, 0);
-    const vTarjeta = ventas
-      .filter((v) => v.paymentMethod === "TARJETA")
-      .reduce((acc, r) => acc + r.amount, 0);
+    // --- LÓGICA CONTABLE DETALLADA ---
+    const calc = (arr, method) =>
+      arr
+        .filter((i) => i.paymentMethod === method)
+        .reduce((a, r) => a + r.amount, 0);
 
-    const totalVentas = vEfectivo + vDigital + vTarjeta;
-    const totalGastos = gastos.reduce((acc, r) => acc + r.amount, 0);
-    const totalProv = proveedores.reduce((acc, r) => acc + r.amount, 0);
-    const totalEgresos = totalGastos + totalProv;
+    // Desglose Ventas
+    const vEf = calc(ventas, "EFECTIVO");
+    const vYa = calc(ventas, "YAPE / PLIN");
+    const vTa = calc(ventas, "TARJETA");
+    const totalVentas = vEf + vYa + vTa;
 
-    // El efectivo real que debería haber en caja (Ventas Efectivo - Gastos/Prov pagados en efectivo)
-    // Asumimos que los egresos salen del efectivo de caja
-    const efectivoEnCaja = vEfectivo - totalEgresos;
-    const balanceNeto = totalVentas - totalEgresos;
+    // Desglose Egresos (Gastos + Prov)
+    const egresos = [...gastos, ...proveedores];
+    const eEf = calc(egresos, "EFECTIVO");
+    const eYa = calc(egresos, "YAPE / PLIN");
+    const eTa = calc(egresos, "TARJETA");
+    const totalEgresos = eEf + eYa + eTa;
 
-    if (yPos > 200) {
+    // Cuadre final
+    const efectivoEnCaja = vEf - eEf; // Lo que debería haber físicamente
+    const balanceNeto = totalVentas - totalEgresos; // Ganancia total del día
+
+    if (yPos > 210) {
       doc.addPage();
       yPos = 20;
     }
-
-    doc.setFontSize(16);
+    doc.setFontSize(15);
     doc.setTextColor(30, 41, 59);
-    doc.text("RESUMEN CONSOLIDADO", 20, yPos);
+    doc.text("RESUMEN DE CUADRE DE CAJA", 20, yPos);
 
-    // --- TABLA DE RESUMEN FINAL ---
+    const resRows = [];
+
+    // Solo agregar filas de ventas si hubo movimiento
+    resRows.push([
+      {
+        content: "FLUJO DE VENTAS",
+        colSpan: 2,
+        styles: {
+          halign: "center",
+          fillColor: [241, 245, 249],
+          fontStyle: "bold",
+        },
+      },
+    ]);
+    if (vEf > 0) resRows.push(["Ventas en Efectivo", `S/ ${vEf.toFixed(2)}`]);
+    if (vYa > 0)
+      resRows.push(["Ventas por Yape / Plin", `S/ ${vYa.toFixed(2)}`]);
+    if (vTa > 0) resRows.push(["Ventas por Tarjeta", `S/ ${vTa.toFixed(2)}`]);
+    resRows.push([
+      { content: "TOTAL INGRESOS", styles: { fontStyle: "bold" } },
+      {
+        content: `S/ ${totalVentas.toFixed(2)}`,
+        styles: { fontStyle: "bold" },
+      },
+    ]);
+
+    // Solo agregar filas de egresos si hubo movimiento
+    if (totalEgresos > 0) {
+      resRows.push([
+        {
+          content: "FLUJO DE EGRESOS",
+          colSpan: 2,
+          styles: {
+            halign: "center",
+            fillColor: [241, 245, 249],
+            fontStyle: "bold",
+          },
+        },
+      ]);
+      if (eEf > 0)
+        resRows.push(["Egresos Pagados en Efectivo", `S/ ${eEf.toFixed(2)}`]);
+      if (eYa > 0)
+        resRows.push(["Egresos Pagados por Yape", `S/ ${eYa.toFixed(2)}`]);
+      if (eTa > 0)
+        resRows.push(["Egresos Pagados por Tarjeta", `S/ ${eTa.toFixed(2)}`]);
+      resRows.push([
+        { content: "TOTAL EGRESOS", styles: { fontStyle: "bold" } },
+        {
+          content: `S/ ${totalEgresos.toFixed(2)}`,
+          styles: { fontStyle: "bold" },
+        },
+      ]);
+    }
+
+    // Cuadre Final (SIEMPRE VISIBLE)
+    resRows.push([
+      {
+        content: "SITUACIÓN FINAL",
+        colSpan: 2,
+        styles: {
+          halign: "center",
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+        },
+      },
+    ]);
+    resRows.push([
+      "EFECTIVO FÍSICO EN CAJA (Ventas Ef - Gastos Ef)",
+      {
+        content: `S/ ${efectivoEnCaja.toFixed(2)}`,
+        styles: { fontStyle: "bold", textColor: [37, 99, 235] },
+      },
+    ]);
+    resRows.push([
+      "BALANCE NETO DEL DÍA (Ganancia Real)",
+      {
+        content: `S/ ${balanceNeto.toFixed(2)}`,
+        styles: {
+          fontStyle: "bold",
+          textColor: balanceNeto >= 0 ? [16, 128, 0] : [200, 0, 0],
+        },
+      },
+    ]);
+
     renderTable(doc, {
       startY: yPos + 5,
-      body: [
-        [
-          {
-            content: "TABLA DE VENTAS",
-            colSpan: 2,
-            styles: {
-              halign: "center",
-              fillColor: [241, 245, 249],
-              fontStyle: "bold",
-            },
-          },
-        ],
-        ["Ventas (Efectivo)", `S/ ${vEfectivo.toFixed(2)}`],
-        ["Ventas (Yape / Plin)", `S/ ${vDigital.toFixed(2)}`],
-        ["Ventas (Tarjeta)", `S/ ${vTarjeta.toFixed(2)}`],
-        [
-          { content: "SUMA TOTAL VENTAS", styles: { fontStyle: "bold" } },
-          {
-            content: `S/ ${totalVentas.toFixed(2)}`,
-            styles: { fontStyle: "bold" },
-          },
-        ],
-
-        [
-          {
-            content: "TABLA DE EGRESOS",
-            colSpan: 2,
-            styles: {
-              halign: "center",
-              fillColor: [241, 245, 249],
-              fontStyle: "bold",
-            },
-          },
-        ],
-        ["Total Gastos", `S/ ${totalGastos.toFixed(2)}`],
-        ["Total Proveedores", `S/ ${totalProv.toFixed(2)}`],
-        [
-          {
-            content: "TOTAL EGRESOS (Gastos + Prov)",
-            styles: { fontStyle: "bold" },
-          },
-          {
-            content: `S/ ${totalEgresos.toFixed(2)}`,
-            styles: { fontStyle: "bold" },
-          },
-        ],
-
-        [
-          {
-            content: "CUADRE DE CAJA FINAL",
-            colSpan: 2,
-            styles: {
-              halign: "center",
-              fillColor: [30, 41, 59],
-              textColor: [255, 255, 255],
-              fontStyle: "bold",
-            },
-          },
-        ],
-        [
-          "EFECTIVO QUE DEBE HABER EN CAJA",
-          {
-            content: `S/ ${efectivoEnCaja.toFixed(2)}`,
-            styles: { fontStyle: "bold", textColor: [37, 99, 235] },
-          },
-        ],
-        [
-          "BALANCE NETO (GANANCIA REAL)",
-          {
-            content: `S/ ${balanceNeto.toFixed(2)}`,
-            styles: {
-              fontStyle: "bold",
-              textColor: balanceNeto >= 0 ? [16, 128, 0] : [200, 0, 0],
-            },
-          },
-        ],
-      ],
+      body: resRows,
       theme: "grid",
-      styles: { fontSize: 10, cellPadding: 3 },
-      columnStyles: { 0: { cellWidth: 120 }, 1: { halign: "right" } },
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      columnStyles: { 0: { cellWidth: 125 }, 1: { halign: "right" } },
     });
 
-    // --- PROCESO DE ENVÍO (GMAIL Y WHATSAPP) ---
-    const pdfArray = doc.output();
-    const pdfBuffer = Buffer.from(pdfArray, "binary");
+    // --- ENVÍO ---
+    const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
     const pdfBase64 = pdfBuffer.toString("base64");
 
     const transporter = nodemailer.createTransport({
@@ -207,9 +212,9 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
     });
 
     await transporter.sendMail({
-      from: '"POS Librería Leo" <pedroenocgb1245@gmail.com>',
+      from: '"Librería Leo" <pedroenocgb1245@gmail.com>',
       to: emailDestino,
-      subject: `📊 Cierre de Caja - ${fechaStr}`,
+      subject: `📊 Cierre Caja ${fechaStr}`,
       attachments: [{ filename: `Cierre_${fechaStr}.pdf`, content: pdfBuffer }],
     });
 
@@ -222,12 +227,11 @@ exports.generarYEnviarReporte = async (data, emailDestino) => {
       );
       await client.sendMessage(
         chatId,
-        `📊 *Librería Leo - Reporte Final*\nBalance: *S/ ${balanceNeto.toFixed(2)}*\nEfectivo en Caja: *S/ ${efectivoEnCaja.toFixed(2)}*`,
+        `📊 *Librería Leo - Cuadre Final*\n\nEfectivo en Caja: *S/ ${efectivoEnCaja.toFixed(2)}*\nGanancia Real: *S/ ${balanceNeto.toFixed(2)}*`,
       );
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 2500));
       await client.sendMessage(chatId, media);
     }
-
     return true;
   } catch (error) {
     console.error("Error Report Service:", error);
